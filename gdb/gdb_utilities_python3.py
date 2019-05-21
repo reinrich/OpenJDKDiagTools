@@ -163,7 +163,8 @@ Metadata_t = gdb.lookup_type('Metadata')                      # Metadata
 Metadata_tp = gdb.lookup_type('Metadata').pointer()           # Metadata*
 Metadata_tpp = gdb.lookup_type('Metadata').pointer().pointer()# Metadata**
 Metadata_t = gdb.lookup_type('Metadata')                      # Metadata
-ConstantPool_t = gdb.lookup_type('ConstantPool')              # ConstantPool
+ConstantPool_t  = gdb.lookup_type('ConstantPool')             # ConstantPool
+ConstantPool_tp = gdb.lookup_type('ConstantPool').pointer()   # ConstantPool
 Klass_t = gdb.lookup_type('Klass')                            # Klass
 Klass_tp = gdb.lookup_type('Klass').pointer()                 # Klass*
 oopDesc_tp = gdb.lookup_type('oopDesc').pointer()             # oopDesc*
@@ -173,9 +174,10 @@ ClassLoaderData_tp = gdb.lookup_type('ClassLoaderData').pointer() # ClassLoaderD
 ClassLoaderDataGraph_t = gdb.lookup_type('ClassLoaderDataGraph')  # ClassLoaderDataGraph
 ClassLoaderDataGraph_tp = gdb.lookup_type('ClassLoaderDataGraph').pointer() # ClassLoaderDataGraph*
 Method_t = gdb.lookup_type('Method')                          # Method
-ConstMethod_t = gdb.lookup_type('ConstMethod')                # ConstMethod
+ConstMethod_t  = gdb.lookup_type('ConstMethod')               # ConstMethod
+ConstMethod_tp = gdb.lookup_type('ConstMethod').pointer()     # ConstMethod*
 Symbol_t = gdb.lookup_type('Symbol')                          # Symbol
-Symbol_tp= gdb.lookup_type('Symbol').pointer()                # Symbol
+Symbol_tp= gdb.lookup_type('Symbol').pointer()                # Symbol*
 oopDesc_tpp = gdb.lookup_type('oopDesc').pointer()            # oopDesc**
 Compile_tp = gdb.lookup_type('Compile').pointer()             # Compile*
 #TODO
@@ -665,31 +667,43 @@ class SymbolP(GdbValWrapper):
 class Symbol(MetaspaceObj):
     def __init__(self, val, gdbtype = Symbol_t):
         super(Symbol, self).__init__(val, gdbtype)
+    def length(self):
+        return self.getField('_length_and_refcount') >> 16
     def extended_str(self):
-        return self.getField('_body').address.cast(char_tp).string('utf-8', 'ignore', self.getField('_length'))
+        return self.getField('_body').address.cast(char_tp).string('utf-8', 'ignore', self.length().__int__())
 
         
 #############################################################################
 # ConstantPool
 #############################################################################
 
+# Pointer to ConstantPool, i.e. ConstantPool*
+class ConstantPoolP(GdbValWrapper):
+    def __init__(self, val, gdbtype = ConstantPool_tp):
+        super(ConstantPoolP, self).__init__(val, gdbtype, ConstantPool)
+
 class ConstantPool(Metadata):
     def __init__(self, cpoop, gdbtype = ConstantPool_t):
         super(ConstantPool, self).__init__(cpoop, gdbtype)
     def pool_holder(self):
-        return Klass(self.getField('_pool_holder'))
+        return KlassP(self.getField('_pool_holder'))
         
 #############################################################################
 # ConstMethod
 #############################################################################
 
+# Pointer to ConstMethod, i.e. ConstMethod*
+class ConstMethodP(GdbValWrapper):
+    def __init__(self, val, gdbtype = ConstMethod_tp):
+        super(ConstMethodP, self).__init__(val, gdbtype, ConstMethod)
+
 class ConstMethod(Metadata):
     _has_linenumber_table = 1
     _has_checked_exceptions = 2
     _has_localvariable_table = 4
-    def __init__(self, cmoop, gdbtype = ConstMethod_t):
-        # TTT
-        super(ConstMethod, self).__init__(cmoop, gdbtype)
+    def __init__(self, val, gdbtype = ConstMethod_t):
+        super(ConstMethod, self).__init__(val, gdbtype)
+        self._constants = ConstantPoolP(self.getField('_constants'))
     def code_base(self): return (self+1).unwrap().cast(address_t)
     def code_end(self): return self.code_base() + self.code_size()
     def code_size(self): return self.getField('_code_size')
@@ -708,10 +722,10 @@ class ConstMethod(Metadata):
 class Method(Metadata):
     def __init__(self, moop, gdbtype = Method_t):
         super(Method, self).__init__(moop, gdbtype)
-        self._constants = ConstantPool(self.getField('_constants'))
-        self._constMethod = ConstMethod(self.getField('_constMethod'))
+        self._constMethod = ConstMethodP(self.getField('_constMethod'))
     def constMethod(self): return self._constMethod
-    def code_size(self): return self._constMethod.code_size()
+    def constants(self): return self._constMethod.deref()._constants
+    def code_size(self): return self._constMethod.deref().code_size()
     def has_linenumber_table(self): return self.constMethod().has_linenumber_table()
     def compressed_linenumber_table(self): return self.constMethod().compressed_linenumber_table()
     def line_number_from_bci(self, bci):
@@ -737,11 +751,13 @@ class Method(Metadata):
     def extended_str(self):
         res = self.__str__() + ':'
 
-        cpool_base = (self._constants.unwrap().cast(char_tp)
+        cpool_base = (self.constants().unwrap().cast(char_tp)
                       + ConstantPool_t.sizeof).cast(intptr_tp)
 
         # print holder klass
-        holder = self._constants.pool_holder()
+        pdb.set_trace()
+        cnsts = self.constants()
+        holder = self.constants().deref().pool_holder()
         res += holder.extended_str()+ '.'
 
         # print the name
@@ -763,9 +779,10 @@ class rrr (gdb.Function):
     def __init__(self):
         super (rrr, self).__init__("rrr")
 
-    def invoke (self, start):
-        Method(start)
-        return 42
+    def invoke (self, m_raw):
+        m = Method(m_raw)
+        gpp(m)
+        return m.unwrap()
         # res = Method(start)
         # if res != NULL:
         #     gpp(res)
