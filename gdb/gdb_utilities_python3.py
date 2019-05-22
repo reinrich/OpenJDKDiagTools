@@ -56,7 +56,7 @@ import pdb
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #
 # ---------------------------------------------------------------------
-# CC_find_blob_unsafe: Find a nmethod for a given pc 
+# CC_find_blob_unsafe: Find a nmethod for a given pc
 # ---------------------------------------------------------------------
 #
 # Example:
@@ -68,7 +68,7 @@ import pdb
 # ---------------------------------------------------------------------
 # NM_pc_desc_at: get the PcDesc for a given pc
 # ---------------------------------------------------------------------
-# 
+#
 # Example:
 #
 #    (gdb) print $NM_pc_desc_at(0x0000008006424c08)
@@ -78,7 +78,7 @@ import pdb
 # ---------------------------------------------------------------------
 # NM_print_inlining_at: print inlining at the given compiled pc
 # ---------------------------------------------------------------------
-# 
+#
 # Example:
 #
 #    (gdb) print $NM_print_inlining_at(0x00002aaaad53db7f)
@@ -93,7 +93,7 @@ import pdb
 # COMP_find_ir_node: find the Node* corresponging to the provided
 #                    Compile object and node idx
 # ---------------------------------------------------------------------
-# 
+#
 # Example:
 #
 #    (gdb) print $COMP_find_ir_node((class Compile * const) 0x4005a35d4a0, 229)
@@ -232,7 +232,7 @@ class JavaValue(object):
 #    (gdb) py pdb.pm()
 #    > [some path ...]
 #    -> res = nm.pc_desc_at(pc)
-#    (Pdb) 
+#    (Pdb)
 #
 
 # pretty print a gdb.Value when debugging with pdb (python debugger)
@@ -287,7 +287,7 @@ def gdbval2str(val):
 #   class <subclass name>(GdbValWrapper):
 #       def __init__(self, klass, gdbtype = T):
 #           super(<subclass name>, self).__init__(klass, gdbtype)
-#   
+#
 #
 #
 class GdbValWrapper(object):
@@ -340,26 +340,30 @@ class GdbValWrapper(object):
         if self._ptr_type is None:
             raise Exception("Error: taking address " + gdbval2str(self) + ": ptr_type not given for class " + self.__class__.__name__);
         return self._ptr_type(self._gdbval.address)
-        
+
 # Constants
 NULL = GdbValWrapper(gdb.Value(0),void_tp)
 
 
+#############################################################################
+# GDB Commands
+#############################################################################
+
 # ---------------------------------------------------------------------
-# hspp: find the hotspot object referenced by a given address
+# hspp: Print a human readable representation of known hotspot types.
 # ---------------------------------------------------------------------
 #
 # Example:
 #
-#      (gdb) hs-pp 0x00000000ec4a6a00
-#      {(oopDesc *)0xec4a6a00} points to instance of jdk/internal/reflect/DelegatingClassLoader
+#      (gdb) hspp (Method*)0x7f7197c03c80
+#      {(Method *)0x7f7197c03c80}:EATestCaseBaseTarget.dontline_endlessLoop()J
 #
 
 class hspp (gdb.Command):
-    """TODO: Documentation for hs-pp"""
+    """Pretty print known hotspot types. The type must be included in the argument. Example: hspp (Method*)0x7f7197c03c80"""
 
     def __init__ (self):
-        super (hspp, self).__init__ ("hs-pp", gdb.COMMAND_USER)
+        super (hspp, self).__init__ ("hspp", gdb.COMMAND_USER)
 
     def invoke (self, val_str, from_tty):
         val = gdb.parse_and_eval(val_str)
@@ -369,7 +373,29 @@ class hspp (gdb.Command):
         else:
             gdb.write("Error: type unknown '" + gdbval2str(val) + "'\n")
 
-hspp ()        
+hspp ()
+
+# ---------------------------------------------------------------------
+# hs_find: find the hotspot object referenced by a given address
+# ---------------------------------------------------------------------
+#
+# Example:
+#
+#      (gdb) hs-find 0x00000000ec4a6a00
+#      {(oopDesc *)0xec4a6a00} points to instance of jdk/internal/reflect/DelegatingClassLoader
+#
+
+class hs_find (gdb.Command):
+    """TODO: Documentation for hs-find"""
+
+    def __init__ (self):
+        super (hs_find, self).__init__ ("hs-find", gdb.COMMAND_USER)
+
+    def invoke (self, addr, from_tty):
+        Universe.find(gdb.parse_and_eval(addr))
+
+hs_find ()
+
 
 #############################################################################
 # GC related stuff
@@ -431,27 +457,6 @@ class Universe(object):
         if cls._heap.is_in_reserved(addr): print(oopDescP(addr).extended_str())
         # TODO: add Metaspace, Codecache, ...
         else: print(gdbval2str(addr) + " NOT FOUND")
-
-# ---------------------------------------------------------------------
-# hs_find: find the hotspot object referenced by a given address
-# ---------------------------------------------------------------------
-#
-# Example:
-#
-#      (gdb) hs-find 0x00000000ec4a6a00
-#      {(oopDesc *)0xec4a6a00} points to instance of jdk/internal/reflect/DelegatingClassLoader
-#
-
-class hs_find (gdb.Command):
-    """TODO: Documentation for hs-find"""
-
-    def __init__ (self):
-        super (hs_find, self).__init__ ("hs-find", gdb.COMMAND_USER)
-
-    def invoke (self, addr, from_tty):
-        Universe.find(gdb.parse_and_eval(addr))
-
-hs_find ()        
 
 #############################################################################
 # Klass
@@ -669,7 +674,7 @@ class hs_print_all_class_loader_data (gdb.Command):
         ClassLoaderDataGraph.cld_do(ClassLoaderDataP.print_ext)
 
 
-hs_print_all_class_loader_data ()        
+hs_print_all_class_loader_data ()
 
 
 #############################################################################
@@ -699,7 +704,7 @@ class Symbol(MetaspaceObj):
     def extended_str(self):
         return self.getField('_body').address.cast(char_tp).string('utf-8', 'ignore', self.length().__int__())
 
-        
+
 #############################################################################
 # ConstantPool
 #############################################################################
@@ -709,7 +714,7 @@ class ConstantPool(Metadata):
         super(ConstantPool, self).__init__(cpoop, gdbtype)
     def pool_holder(self):
         return KlassP(self.getField('_pool_holder'))
-        
+
 #############################################################################
 # ConstMethod
 #############################################################################
@@ -834,7 +839,7 @@ class _GrowableArray(list):
 #############################################################################
 
 # ---------------------------------------------------------------------
-# CC_find_blob_unsafe: Find a nmethod for a given pc 
+# CC_find_blob_unsafe: Find a nmethod for a given pc
 # ---------------------------------------------------------------------
 #
 # Example:
@@ -902,7 +907,7 @@ class CodeHeap(GdbValWrapper):
     def find_start(self, p):
         if not self.contains(p):
             return 0
-        
+
         i = self.segment_for(p)
 
         b = self._segmap.low().cast(address_t)
@@ -951,7 +956,7 @@ class CodeBlob(GdbValWrapper):
         return nmethod(self.unwrap())
 
 class CodeCache(object):
-    @staticmethod 
+    @staticmethod
     def find_blob_unsafe(start):
         heapAsGdbVal = gdb.parse_and_eval("CodeCache::_heap")
         _heap = CodeHeap(heapAsGdbVal)
@@ -1013,7 +1018,7 @@ class CompressedStream(object):
     def position(self): return self._position
     def set_position(self, position): self._position = position
     def buffer(self):   return self._buffer
-        
+
 class CompressedReadStream(CompressedStream):
     def __init__(self, buffer, position = gdb.Value(0)):
         super(CompressedReadStream, self).__init__(buffer, position)
@@ -1159,7 +1164,7 @@ class nmethod(CodeBlob):
                     upper = mid
                     break
                 mid = lower + step
-            step = step >> LOG2_RADIX 
+            step = step >> LOG2_RADIX
 
 
         # Sneak up on the value with a linear search of length ~16.
@@ -1186,7 +1191,7 @@ class nmethod(CodeBlob):
         res =  self.find_pc_desc(pc, approximate)
         if res != NULL: return res
         # not found -> approximate
-        return self.find_pc_desc(pc, True) 
+        return self.find_pc_desc(pc, True)
     def method(self): return Method(self.getField('_method'))
     def extended_str (self):
         return self.__str__() + ':' + self.method().extended_str()
@@ -1231,4 +1236,3 @@ class PcDesc(GdbValWrapper):
         super (PcDesc, self).__init__(desc, gdbtype)
     def pc_offset(self): return self.getField("_pc_offset")
     def scope_decode_offset(self): return self.getField("_scope_decode_offset")
-    
