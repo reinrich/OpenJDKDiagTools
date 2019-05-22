@@ -158,11 +158,9 @@ CodeBlob_tp = gdb.lookup_type('CodeBlob').pointer()           # CodeBlob*
 nmethod_tp = gdb.lookup_type('nmethod').pointer()             # nmethod*
 PcDescCache_tp = gdb.lookup_type('PcDescCache').pointer()     # PcDescCache*
 PcDesc_tp = gdb.lookup_type('PcDesc').pointer()               # PcDesc*
-MetaspaceObj_t = gdb.lookup_type('MetaspaceObj')              # MetaspaceObj
-Metadata_t = gdb.lookup_type('Metadata')                      # Metadata
+MetaspaceObj_tp = gdb.lookup_type('MetaspaceObj').pointer()   # MetaspaceObj*
 Metadata_tp = gdb.lookup_type('Metadata').pointer()           # Metadata*
 Metadata_tpp = gdb.lookup_type('Metadata').pointer().pointer()# Metadata**
-Metadata_t = gdb.lookup_type('Metadata')                      # Metadata
 ConstantPool_t  = gdb.lookup_type('ConstantPool')             # ConstantPool
 ConstantPool_tp = gdb.lookup_type('ConstantPool').pointer()   # ConstantPool
 Klass_t = gdb.lookup_type('Klass')                            # Klass
@@ -173,11 +171,12 @@ ClassLoaderData_t = gdb.lookup_type('ClassLoaderData')        # ClassLoaderData
 ClassLoaderData_tp = gdb.lookup_type('ClassLoaderData').pointer() # ClassLoaderData*
 ClassLoaderDataGraph_t = gdb.lookup_type('ClassLoaderDataGraph')  # ClassLoaderDataGraph
 ClassLoaderDataGraph_tp = gdb.lookup_type('ClassLoaderDataGraph').pointer() # ClassLoaderDataGraph*
-Method_t = gdb.lookup_type('Method')                          # Method
+Method_t  = gdb.lookup_type('Method')                         # Method
+Method_tp = gdb.lookup_type('Method').pointer()               # Method
 ConstMethod_t  = gdb.lookup_type('ConstMethod')               # ConstMethod
 ConstMethod_tp = gdb.lookup_type('ConstMethod').pointer()     # ConstMethod*
-Symbol_t = gdb.lookup_type('Symbol')                          # Symbol
-Symbol_tp= gdb.lookup_type('Symbol').pointer()                # Symbol*
+Symbol_t   = gdb.lookup_type('Symbol')                        # Symbol
+Symbol_tpp = gdb.lookup_type('Symbol').pointer().pointer()    # Symbol**
 oopDesc_tpp = gdb.lookup_type('oopDesc').pointer()            # oopDesc**
 Compile_tp = gdb.lookup_type('Compile').pointer()             # Compile*
 #TODO
@@ -253,7 +252,7 @@ def gpp(val, newline = True):
     else:
         s = gdbval2str(val)
     gdb.write(s)
-    if newline: print
+    if newline: gdb.write("\n")
 
 # get a human readable string respresentation of a gdb.Value
 def gdbval2str(val):
@@ -296,6 +295,8 @@ class GdbValWrapper(object):
         if not isinstance(gdbval, gdb.Value):
             # GdbValWrapper is for gdb.Values only!
             raise Exception(repr(gdbval) + " is not an gdb.Value instance!")
+        if gdbtype.code == gdb.TYPE_CODE_PTR and (gdbval.type.code != gdb.TYPE_CODE_PTR and gdbval.type.code != gdb.TYPE_CODE_INT):
+            raise Exception("Error: must provide address to construct " + self.__class__.__name__)
         self._gdbval = gdbval.cast(gdbtype)
         self._ptr_target_type = ptr_target_type
         self._ptr_type = ptr_type
@@ -324,7 +325,12 @@ class GdbValWrapper(object):
     # return the wrapped value
     def unwrap(self): return self._gdbval
     def is_null_ptr(self): return self._gdbval == 0
-    def getField(self, name): return self._gdbval[name]
+    def getField(self, name):
+        if self._gdbval.type.code == gdb.TYPE_CODE_PTR:
+            obj = self._gdbval.dereference()
+        else:
+            obj = self._gdbval
+        return obj[name]
     # dereference the underlying pointer and construct new object using the given constructor
     def deref(self):
         if self._ptr_target_type is None:
@@ -338,6 +344,32 @@ class GdbValWrapper(object):
 # Constants
 NULL = GdbValWrapper(gdb.Value(0),void_tp)
 
+
+# ---------------------------------------------------------------------
+# hspp: find the hotspot object referenced by a given address
+# ---------------------------------------------------------------------
+#
+# Example:
+#
+#      (gdb) hs-pp 0x00000000ec4a6a00
+#      {(oopDesc *)0xec4a6a00} points to instance of jdk/internal/reflect/DelegatingClassLoader
+#
+
+class hspp (gdb.Command):
+    """TODO: Documentation for hs-pp"""
+
+    def __init__ (self):
+        super (hspp, self).__init__ ("hs-pp", gdb.COMMAND_USER)
+
+    def invoke (self, val_str, from_tty):
+        val = gdb.parse_and_eval(val_str)
+        if val.type == Method_tp:
+            m = Method(val)
+            gpp(m)
+        else:
+            gdb.write("Error: type unknown '" + gdbval2str(val) + "'\n")
+
+hspp ()        
 
 #############################################################################
 # GC related stuff
@@ -437,7 +469,7 @@ class KlassP(GdbValWrapper):
 class Klass(GdbValWrapper):
     def __init__(self, val, gdbtype = Klass_t):
         super(Klass, self).__init__(val, gdbtype)
-        self._name = SymbolP(self.getField('_name'))
+        self._name = Symbol(self.getField('_name'))
     def next_link(self):
         return KlassP(self.getField('_next_link'))
     @staticmethod
@@ -452,7 +484,7 @@ class Klass(GdbValWrapper):
     def decode_klass(v):
         return NULL if Klass.is_null(v) else Klass.decode_klass_not_null(v)
     def extended_str(self):
-        if self._name != NULL: return self._name.deref().extended_str()
+        if self._name != NULL: return self._name.extended_str()
         else: return "special klass (e.g. klassKlass)"
 
 #############################################################################
@@ -647,25 +679,20 @@ hs_print_all_class_loader_data ()
 #############################################################################
 
 class MetaspaceObj(GdbValWrapper):
-    def __init__(self, val, gdbtype = MetaspaceObj_t):
+    def __init__(self, val, gdbtype = MetaspaceObj_tp):
         super(MetaspaceObj, self).__init__(val, gdbtype)
 
 class Metadata(MetaspaceObj):
-    def __init__(self, val, gdbtype = Metadata_t):
+    def __init__(self, val, gdbtype = Metadata_tp):
         super(Metadata, self).__init__(val, gdbtype)
 
 #############################################################################
 # Symbol
 #############################################################################
 
-# Pointer to Symbol, i.e. Symbol*
-class SymbolP(GdbValWrapper):
-    def __init__(self, val, gdbtype = Symbol_tp):
-        super(SymbolP, self).__init__(val, gdbtype, Symbol)
-
 # Symbol
 class Symbol(MetaspaceObj):
-    def __init__(self, val, gdbtype = Symbol_t):
+    def __init__(self, val, gdbtype = Symbol_tp):
         super(Symbol, self).__init__(val, gdbtype)
     def length(self):
         return self.getField('_length_and_refcount') >> 16
@@ -677,13 +704,8 @@ class Symbol(MetaspaceObj):
 # ConstantPool
 #############################################################################
 
-# Pointer to ConstantPool, i.e. ConstantPool*
-class ConstantPoolP(GdbValWrapper):
-    def __init__(self, val, gdbtype = ConstantPool_tp):
-        super(ConstantPoolP, self).__init__(val, gdbtype, ConstantPool)
-
 class ConstantPool(Metadata):
-    def __init__(self, cpoop, gdbtype = ConstantPool_t):
+    def __init__(self, cpoop, gdbtype = ConstantPool_tp):
         super(ConstantPool, self).__init__(cpoop, gdbtype)
     def pool_holder(self):
         return KlassP(self.getField('_pool_holder'))
@@ -692,18 +714,13 @@ class ConstantPool(Metadata):
 # ConstMethod
 #############################################################################
 
-# Pointer to ConstMethod, i.e. ConstMethod*
-class ConstMethodP(GdbValWrapper):
-    def __init__(self, val, gdbtype = ConstMethod_tp):
-        super(ConstMethodP, self).__init__(val, gdbtype, ConstMethod)
-
 class ConstMethod(Metadata):
     _has_linenumber_table = 1
     _has_checked_exceptions = 2
     _has_localvariable_table = 4
-    def __init__(self, val, gdbtype = ConstMethod_t):
+    def __init__(self, val, gdbtype = ConstMethod_tp):
         super(ConstMethod, self).__init__(val, gdbtype)
-        self._constants = ConstantPoolP(self.getField('_constants'))
+        self._constants = ConstantPool(self.getField('_constants'))
     def code_base(self): return (self+1).unwrap().cast(address_t)
     def code_end(self): return self.code_base() + self.code_size()
     def code_size(self): return self.getField('_code_size')
@@ -720,12 +737,12 @@ class ConstMethod(Metadata):
 #############################################################################
 
 class Method(Metadata):
-    def __init__(self, moop, gdbtype = Method_t):
+    def __init__(self, moop, gdbtype = Method_tp):
         super(Method, self).__init__(moop, gdbtype)
-        self._constMethod = ConstMethodP(self.getField('_constMethod'))
+        self._constMethod = ConstMethod(self.getField('_constMethod'))
     def constMethod(self): return self._constMethod
-    def constants(self): return self._constMethod.deref()._constants
-    def code_size(self): return self._constMethod.deref().code_size()
+    def constants(self): return self._constMethod._constants
+    def code_size(self): return self._constMethod.code_size()
     def has_linenumber_table(self): return self.constMethod().has_linenumber_table()
     def compressed_linenumber_table(self): return self.constMethod().compressed_linenumber_table()
     def line_number_from_bci(self, bci):
@@ -755,22 +772,21 @@ class Method(Metadata):
                       + ConstantPool_t.sizeof).cast(intptr_tp)
 
         # print holder klass
-        pdb.set_trace()
         cnsts = self.constants()
-        holder = self.constants().deref().pool_holder()
+        holder = self.constants().pool_holder()
         res += holder.extended_str()+ '.'
 
         # print the name
         sig_idx = self._constMethod.getField('_name_index')
         addr_in_cpool = ((cpool_base)[sig_idx]).address
-        nameSymOop = Symbol(addr_in_cpool.cast(oopDesc_tpp).dereference())
-        res += nameSymOop.extended_str()
+        nameSym = Symbol(addr_in_cpool.cast(Symbol_tpp).dereference())
+        res += nameSym.extended_str()
 
         # print the signature
         sig_idx = self._constMethod.getField('_signature_index')
         addr_in_cpool = ((cpool_base)[sig_idx]).address
-        sigSymOop = Symbol(addr_in_cpool.cast(oopDesc_tpp).dereference())
-        res += sigSymOop.extended_str()
+        sigSym = Symbol(addr_in_cpool.cast(Symbol_tpp).dereference())
+        res += sigSym.extended_str()
         return res
 
 class rrr (gdb.Function):
@@ -781,8 +797,8 @@ class rrr (gdb.Function):
 
     def invoke (self, m_raw):
         m = Method(m_raw)
-        gpp(m)
-        return m.unwrap()
+#        gpp(m)
+        return res
         # res = Method(start)
         # if res != NULL:
         #     gpp(res)
