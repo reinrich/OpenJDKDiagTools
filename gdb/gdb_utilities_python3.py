@@ -13,6 +13,15 @@ import pdb
 #############################################################################
 #
 # ---------------------------------------------------------------------
+# hspp: Print a human readable representation of known hotspot types.
+# ---------------------------------------------------------------------
+#
+# Example:
+#
+#      (gdb) hspp (Method*)0x7f7197c03c80
+#      {(Method *)0x7f7197c03c80}:EATestCaseBaseTarget.dontline_endlessLoop()J
+#
+# ---------------------------------------------------------------------
 # hs_find: find the hotspot object referenced by a given address
 # ---------------------------------------------------------------------
 #
@@ -179,11 +188,7 @@ Symbol_tp  = gdb.lookup_type('Symbol').pointer()              # Symbol*
 Symbol_tpp = gdb.lookup_type('Symbol').pointer().pointer()    # Symbol**
 oopDesc_tpp = gdb.lookup_type('oopDesc').pointer()            # oopDesc**
 Compile_tp = gdb.lookup_type('Compile').pointer()             # Compile*
-#TODO
-#Node_tp = gdb.lookup_type('Node').pointer()                   # Node*
-#RegionNode_tp = gdb.lookup_type('RegionNode').pointer()       # RegionNode*
-#LoopNode_tp = gdb.lookup_type('LoopNode').pointer()           # LoopNode*
-#RootNode_tp = gdb.lookup_type('RootNode').pointer()           # RootNode*
+compiledVFrame_tp = gdb.lookup_type('compiledVFrame').pointer() # compiledVFrame*
 
 # global definitions from globalDefinitions.hpp
 badInt           = gdb.parse_and_eval('-3').cast(jint_t);                       # generic "bad int" value
@@ -247,6 +252,7 @@ class JavaValue(object):
 #
 def gpp(val, newline = True):
     if (   isinstance(val, Method)
+        or isinstance(val, compiledVFrame)
         or isinstance(val, nmethod)):
         s = val.extended_str()
     else:
@@ -307,7 +313,7 @@ class GdbValWrapper(object):
     #
     # operators: delegate to the wrapped gdb.Value
     #
-    def __eq__(self, other): return self.unwrap() == other.unwrap()
+    def __eq__(self, other): return self.unwrap() == (other.unwrap() if isinstance(other, GdbValWrapper) else other)
     def __ne__(self, other): return self.unwrap() != other.unwrap()
     def __lt__(self, other): return self.unwrap() <  other.unwrap()
     def __le__(self, other): return self.unwrap() <= other.unwrap()
@@ -369,6 +375,9 @@ class hspp (gdb.Command):
         val = gdb.parse_and_eval(val_str)
         if val.type == Method_tp:
             m = Method(val)
+            gpp(m)
+        elif val.type == compiledVFrame_tp:
+            m = compiledVFrame(val)
             gpp(m)
         else:
             gdb.write("Error: type unknown '" + gdbval2str(val) + "'\n")
@@ -742,8 +751,8 @@ class ConstMethod(Metadata):
 #############################################################################
 
 class Method(Metadata):
-    def __init__(self, moop, gdbtype = Method_tp):
-        super(Method, self).__init__(moop, gdbtype)
+    def __init__(self, val, gdbtype = Method_tp):
+        super(Method, self).__init__(val, gdbtype)
         self._constMethod = ConstMethod(self.getField('_constMethod'))
     def constMethod(self): return self._constMethod
     def constants(self): return self._constMethod._constants
@@ -794,24 +803,24 @@ class Method(Metadata):
         res += sigSym.extended_str()
         return res
 
-class rrr (gdb.Function):
-    """TODO: Documentation for rrr"""
+#############################################################################
+# compiledVFrame
+#############################################################################
 
-    def __init__(self):
-        super (rrr, self).__init__("rrr")
+class compiledVFrame(GdbValWrapper):
+    def __init__(self, val, gdbtype = compiledVFrame_tp):
+        super(compiledVFrame, self).__init__(val, gdbtype)
 
-    def invoke (self, m_raw):
-        m = Method(m_raw)
-#        gpp(m)
+    def extended_str(self):
+        res = self.__str__() + ':'
+
+        scope = self.getField('_scope');
+        if NULL == scope:
+            raise Exception('TODO')
+        m_unwrapped = scope['_method']
+        m = Method(m_unwrapped)
+        res += m.extended_str()
         return res
-        # res = Method(start)
-        # if res != NULL:
-        #     gpp(res)
-        #     res = res.unwrap()
-        # return res
-
-rrr()
-
 
 #############################################################################
 #
