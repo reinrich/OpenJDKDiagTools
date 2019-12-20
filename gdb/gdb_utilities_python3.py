@@ -253,6 +253,7 @@ class JavaValue(object):
 def gpp(val, newline = True):
     if (   isinstance(val, Method)
         or isinstance(val, compiledVFrame)
+        or isinstance(val, Symbol)
         or isinstance(val, nmethod)):
         s = val.extended_str()
     else:
@@ -364,6 +365,8 @@ NULL = GdbValWrapper(gdb.Value(0),void_tp)
 #      (gdb) hspp (Method*)0x7f7197c03c80
 #      {(Method *)0x7f7197c03c80}:EATestCaseBaseTarget.dontline_endlessLoop()J
 #
+#
+# Note: Adapt gpp to extend on other type.
 
 class hspp (gdb.Command):
     """Pretty print known hotspot types. The type must be included in the argument. Example: hspp (Method*)0x7f7197c03c80"""
@@ -373,7 +376,11 @@ class hspp (gdb.Command):
 
     def invoke (self, val_str, from_tty):
         val = gdb.parse_and_eval(val_str)
-        if val.type == Method_tp:
+        
+        if val.type == Symbol_tp:
+            m = Symbol(val)
+            gpp(m)
+        elif val.type == Method_tp:
             m = Method(val)
             gpp(m)
         elif val.type == compiledVFrame_tp:
