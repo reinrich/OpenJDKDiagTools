@@ -32,10 +32,16 @@
 PAUSED_FILE_PREFIX=vm.paused.
 OUTPUT_FILE=$1
 
-[ -f ${PAUSED_FILE_PREFIX}* ] || { echo 'printf "ERROR: vm.paused.* file not found\n"' > $OUTPUT_FILE ; exit 1 ; }
+set -o pipefail
+
+function find_paused_file() {
+    PAUSED_FILE=$(ls -t -1 ${PAUSED_FILE_PREFIX}* | head -1)
+}
+
+find_paused_file || { echo 'printf "ERROR: vm.paused.* file not found\n"' > $OUTPUT_FILE ; exit 1 ; }
 
 VMPID=$(ls ${PAUSED_FILE_PREFIX}*)
-VMPID=${VMPID#$PAUSED_FILE_PREFIX}
+VMPID=${PAUSED_FILE#$PAUSED_FILE_PREFIX}
 
 
 cat > $OUTPUT_FILE <<EOF
