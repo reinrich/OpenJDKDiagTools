@@ -35,6 +35,13 @@ define x1
   end
 end
 
+define istate
+  set $_fp = (uintptr_t)$arg0
+  set $istate = (frame::ijava_state*)($_fp - frame::ijava_state_size)
+  printf "$istate = %p\n", $istate
+  p/x *$istate
+end
+
 # Local Variables:
 # mode: gdb-script
 # End:
