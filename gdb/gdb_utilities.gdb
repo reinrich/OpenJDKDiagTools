@@ -20,7 +20,7 @@
 # Attaches to a VM that has paused at startup because -XX:+PauseAtStartup was
 # given.
 define attach_to_paused_vm
-  shell ./OpenJDKDiagTools/gdb/gen_gdb_attach_to_paused_vm_helper.sh gdb_attach_to_paused_vm_helper.gdb
+  shell ~/OpenJDKDiagTools/gdb/gen_gdb_attach_to_paused_vm_helper.sh gdb_attach_to_paused_vm_helper.gdb
   source gdb_attach_to_paused_vm_helper.gdb
 end
 
