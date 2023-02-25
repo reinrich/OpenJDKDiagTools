@@ -45,7 +45,11 @@ VMPID=${PAUSED_FILE#$PAUSED_FILE_PREFIX}
 
 
 cat > $OUTPUT_FILE <<EOF
+printf "Deleting ${PAUSED_FILE_PREFIX}${VMPID} \n"
+shell ls -l
+shell rm ${PAUSED_FILE_PREFIX}${VMPID}
+printf "DONE \n"
+shell ls -l
 printf "attaching to VM with PID $VMPID \n"
 attach $VMPID
-shell rm ${PAUSED_FILE_PREFIX}${VMPID}
 EOF
