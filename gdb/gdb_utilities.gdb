@@ -35,9 +35,16 @@ define x1
   end
 end
 
-define istate
+define istate_with_fp
   set $_fp = (uintptr_t)$arg0
   set $istate = (frame::ijava_state*)($_fp - frame::ijava_state_size)
+  printf "$istate = %p\n", $istate
+  p/x *$istate
+end
+
+# istate relative to SP (R1)
+define istate
+  set $istate = &((frame::ijava_state*)(*(void**) $r1))[-1]
   printf "$istate = %p\n", $istate
   p/x *$istate
 end
